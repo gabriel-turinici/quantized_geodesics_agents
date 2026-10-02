@@ -1,7 +1,7 @@
 # Spatial Strategies, Not Actions: Vector-Quantized Geodesics as Tools for LLM-Driven Agents
 
-**Paper:** [arXiv:2610.00613](https://arxiv.org/abs/2610.00613)
-**Author:** Gabriel Turinici
+**Implementation for the paper: [Spatial Strategies, Not Actions: Vector-Quantized Geodesics as Tools for LLM-Driven Agents arXiv:2610.00613](https://arxiv.org/abs/2610.00613)**
+**by Gabriel Turinici**
 
 An LLM-driven agent navigates a partially observable 2D grid world with moving
 obstacles. Instead of asking the LLM to plan low-level moves, we:
