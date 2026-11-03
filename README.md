@@ -264,5 +264,6 @@ check compares the planner's step function with `MovingWorldEnv.advance_one_time
 on 6,565 steps.
 
 Computational cost. The library-based planner takes about 2 seconds per turn on a single
-CPU core. Enumerating all 3,125 five-step primitive sequences instead would take about
-25 hours per turn with the same settings. It is therefore not run.
+CPU core. Enumerating all 3,125 five-step primitive sequences instead would take at least roughly 
+300 times longer per turn, since about 3,086 sequences pass the filter against about 
+9 library tools, so the 3,125-sequence search is not run.
