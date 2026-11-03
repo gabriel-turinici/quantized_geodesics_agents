@@ -191,3 +191,78 @@ MY_URL = "http://OLLAMA_HOST:11434/api/generate"
 Replace `OLLAMA_HOST` with the address of your Ollama server before running
 any LLM step. Alternatively, set `MODEL` / `MODEL_URL` at the top of any run
 script to override on a per-script basis. No other configuration is required.
+
+## Reference baselines without an LLM call
+
+Two non-LLM policies use the same tool library, the same collision filter and the
+same observations as the LLM pipeline. They are reference points for the LLM results
+reported in the paper (Table 1, last two rows, and Section 5 of the manuscript).
+
+Both run from the repository root, because they read `quantized_actions.npz` and
+the `simutils/` package from there. They need `numpy` and `matplotlib` (see
+`requirements.txt`).
+
+### Random choice among safe tools (`run_random_baseline.py`)
+
+At each turn the tools that would hit a car visible in the observation window are
+removed. If none remains the agent waits; if one remains it is taken; otherwise one
+of the remaining tools is drawn uniformly at random. Episodes end at the goal, on a
+collision, or after 30 turns.
+
+    python3 run_random_baseline.py [output_dir]
+
+It runs `NR_RUNS = 100` episodes. Each episode writes a folder with the turn images
+and `chat.txt`; the last `outcome:` line of `chat.txt` is the outcome (`goal`,
+`collision`, or `None` at the turn limit). The reported outcomes are in
+`baseline_results/random_baseline_outcomes.txt`.
+
+### Monte Carlo planner (`mc_pilot.py`, `run_pilot_logged.py`, `audit_obs_only.py`)
+
+The planner chooses one tool per turn by Monte Carlo evaluation. The full description
+is in the docstring of `mc_pilot.py`. In short:
+
+1. Safe tools are the tools that pass the visible-car collision check. If none
+   remains the agent waits; if one remains it is taken.
+2. For each safe tool, 200 hypothetical configurations of the unobserved cars are
+   sampled. Each unobserved cell receives a car with the probability equal to the
+   density of cars seen in the window.
+3. In each sampled configuration the tool is executed, and a random policy then
+   continues for up to 8 more turns. The score of the tool is the fraction of
+   configurations in which the goal is reached.
+4. The highest-scoring tool is executed in the real environment, and the next
+   decision starts from the new observation.
+
+The planner uses only the agent position and the cars inside the observation window
+(the `ObsView` class in `mc_pilot.py`). It knows the movement rules stated in the LLM
+prompt, and it knows the exact goal cell, which the LLM has to find from visual cues.
+That knowledge favours the planner. It learns nothing across episodes, and it has no
+tuned parameters.
+
+Commands:
+
+    python3 mc_pilot.py validate                 # checks the planner's movement and collision rules against MovingWorldEnv
+    python3 mc_pilot.py run 1 21 200 8           # quick run, prints one line per episode
+    python3 run_pilot_logged.py 1 101 200 8      # the 100 episodes of the paper: figures and logs
+    python3 audit_obs_only.py                    # checks that decisions do not depend on cars outside the window
+
+Arguments of the runs: `FIRST END N_PARTICLES HORIZON`. The paper uses 200
+particles and a horizon of 8. Episode `s` uses seed `s`, and its random streams are
+seeded from `s`, so single episodes can be reproduced on their own.
+
+`run_pilot_logged.py` writes, in the current folder, `episode_SS.png` (one panel per
+turn: the full grid with the true cars, the agent path, the goal and the unobserved
+area), `episode_SS.txt` (one line per turn with the tool chosen and the number of
+visible and total cars), and appends one line per episode to
+`pilot_logged_summary.txt`. The outcomes of the 100 reported episodes are in
+`baseline_results/pilot_logged_summary.txt`.
+
+`mc_pilot.py run` uses one random stream shared by all episodes, so its results depend
+on the order of the episodes. The reported results come from `run_pilot_logged.py`.
+
+The reported runs use the same planner and settings on seeds 1 to 100. The validation
+check compares the planner's step function with `MovingWorldEnv.advance_one_timestep`
+on 6,565 steps.
+
+Computational cost. The library-based planner takes about 2 seconds per turn on a single
+CPU core. Enumerating all 3,125 five-step primitive sequences instead would take about
+25 hours per turn with the same settings. It is therefore not run.
