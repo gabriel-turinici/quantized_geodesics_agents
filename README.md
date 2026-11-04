@@ -151,6 +151,15 @@ run_agent_simulation_notools_v1_NoThink.py agent, LLM plans raw actions (think O
 run_sim_wtools_coll_detect_v1.py          agent, tool + code collision check
 run_sim_notools_heuristic_v1.py           no-LLM greedy 1-turn planner (baseline)
 decode_tool_execution_log.py              utility: .pkl log -> readable text
+mc_pilot.py                               no-LLM Monte Carlo planner, 10-tool library (baseline)
+mc_leaf_value.py                          Monte Carlo + leaf value, 10-tool library
+leaf_value_table.py                       offline Bellman table, 10-tool library
+leaf_common.py                            shared helpers for the 10-tool leaf version
+mc_leaf3125.py                            Monte Carlo + leaf value, 3125 sequences (self-contained)
+leaf3125_step_table.py                    offline Bellman table, primitive moves (3125 version)
+leaf3125_common.py                        shared helpers for the 3125 leaf version
+value_table.npy, value_table.png          10-tool value table (generated)
+value_table_step.npy, value_table_step.png  3125 version value table (generated)
 
 simutils/
   __init__.py
@@ -267,3 +276,31 @@ on 6,565 steps.
 Computational cost. The library-based planner takes about 2 seconds per turn on a single
 CPU core. Enumerating all 3,125 five-step primitive sequences instead would be at least 300 times 
 slower per turn with the same settings. It is therefore not run.
+
+## Leaf-value Monte Carlo planners
+
+Two flat Monte Carlo planners whose rollouts end with a value from an offline table. The table is computed once, by Bellman value iteration, and gives for each grid cell an estimate of the probability of reaching the goal. The planner uses that estimate when a rollout ends without reaching the goal or colliding, so the search gets information about the goal beyond its horizon.
+
+### 3125-sequence planner (self-contained)
+
+Files: `leaf3125_common.py`, `leaf3125_step_table.py`, `mc_leaf3125.py`, `value_table_step.npy`. It uses only `simutils/` and does not use the 10-tool library.
+
+Steps:
+
+1. **Table** (`leaf3125_step_table.py`, run once). The table is over the five primitive moves (wait, up, down, left, right). For each cell and move, it simulates one move against 500 car layouts sampled uniformly over the grid, and records the probability of reaching the goal, of surviving, and the next cell. Value iteration then sets V(goal) = 1 and repeats V(x) = max over moves of [P(goal) + P(survive) · V(next cell)] until nothing changes (49 sweeps). The one-step outcomes are checked against the environment's step on random cells and moves.
+2. **Observation.** At each decision the agent sees only the cars in its window (half-size 10). Cars outside the window are hidden.
+3. **Candidates.** The planner keeps every five-step sequence (of the 3125) that does not collide with the visible cars during its five moves.
+4. **Particles.** For each candidate, the planner draws N_PARTICLES completions of the hidden cars: the number of hidden cars is binomial, and they are placed uniformly on the cells outside the window.
+5. **Rollouts.** In each particle, the candidate is executed. If the goal is reached, the score is 1. If a collision occurs, the score is 0. Otherwise the planner continues for HORIZON decisions, choosing at each decision a sequence drawn uniformly among those that do not collide with the visible cars. A rejected draw is redrawn, up to 500 times. If all 500 draws fail, the full filter is run once over all 3125 sequences and one safe sequence is drawn uniformly; if none is safe, the wait sequence is used.
+6. **Leaf value.** If a rollout ends after HORIZON decisions without reaching the goal or colliding, its score is V[agent cell] from the table. With the leaf value off (`noleaf`), this score is 0.
+7. **Choice.** The candidate with the highest average score over its particles is executed for the real environment, with ties broken at random. The planner then repeats from the new observation, for at most 30 decisions.
+
+Command (from the repository root, after building the table or copying `value_table_step.npy`):
+
+    python mc_leaf3125.py run <first_seed> <last_seed_exclusive> <n_particles> <horizon> <leaf|noleaf>
+
+Each run prints a header with the parameters and the value table's start value, then one line per decision with the agent position, its distance to the goal, its table value, the chosen sequence, the candidate scores and the rollout counts. The 3125-sequence planner is slow: one decision with 200 particles takes about one minute.
+
+### 10-tool library planner
+
+Files: `leaf_common.py`, `leaf_value_table.py`, `mc_leaf_value.py`, `value_table.npy`. The same planner over the 10 library tools, with a table built over those tools. `python leaf_value_table.py 2000` builds the table; `python mc_leaf_value.py run <first_seed> <last_seed_exclusive> <n_particles> <horizon> <leaf|noleaf>` runs it. `noleaf` gives the same results as `mc_pilot.py` for the same seeds.
