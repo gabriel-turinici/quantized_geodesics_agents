@@ -223,13 +223,13 @@ is in the docstring of `mc_pilot.py`. In short:
 
 1. Safe tools are the tools that pass the visible-car collision check. If none
    remains the agent waits; if one remains it is taken.
-2. For each safe tool, 200 hypothetical configurations of the unobserved cars are
-   sampled. Each unobserved cell receives a car with the probability equal to the
+2. For each safe tool, 200 hypothetical configurations (also called 'particles' in Monte Carlo simulations)
+   of the unobserved cars are sampled. Each unobserved cell receives a car with the probability equal to the
    density of cars seen in the window.
-3. In each sampled configuration the tool is executed, and a random policy then
+4. In each sampled configuration the tool is executed, and a random policy then
    continues for up to 8 more turns. The score of the tool is the fraction of
    configurations in which the goal is reached.
-4. The highest-scoring tool is executed in the real environment, and the next
+5. The highest-scoring tool is executed in the real environment, and the next
    decision starts from the new observation.
 
 The planner uses only the agent position and the cars inside the observation window
@@ -245,8 +245,9 @@ Commands:
     python3 run_pilot_logged.py 1 101 200 8      # the 100 episodes of the paper: figures and logs
     python3 audit_obs_only.py                    # checks that decisions do not depend on cars outside the window
 
-Arguments of the runs: `FIRST END N_PARTICLES HORIZON`. The paper uses 200
-particles and a horizon of 8. Episode `s` uses seed `s`, and its random streams are
+Arguments of the runs: `FIRST END N_PARTICLES HORIZON`. The paper uses 200 particles, that is 200 sampled 
+hypothetical configurations of the cars outside the window for each candidate tool (the term particle 
+follows established Monte Carlo vocabulary), and a horizon of 8. Episode `s` uses seed `s`, and its random streams are
 seeded from `s`, so single episodes can be reproduced on their own.
 
 `run_pilot_logged.py` writes, in the current folder, `episode_SS.png` (one panel per
